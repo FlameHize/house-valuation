@@ -3,12 +3,17 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+import io
+import base64
+import os
+import datetime
 
 from valuation.dcf import (
     calc_monthly_payment, calc_purchase_fees, calc_fair_value,
     calc_npv, calc_sensitivity_matrix, find_breakeven,
     calc_annual_cashflow,
 )
+from valuation.report_utils import md_to_png, fig_to_html
 
 plt.rcParams["font.sans-serif"] = ["WenQuanYi Micro Hei", "Noto Sans CJK SC",
                                     "SimHei", "DejaVu Sans"]
@@ -58,6 +63,9 @@ with st.sidebar:
         vat_rate = st.slider("增值税率", 0.0, 5.0, 0.0, 0.1, format="%.1f%%", help="满二免征（持有满2年免增值税）") / 100
         iit_rate = st.slider("个人所得税率", 0.0, 5.0, 0.0, 0.1, format="%.1f%%", help="满五唯一免征（持有满5年且唯一住房免个税）") / 100
     other_purchase_fees = st.number_input("其他杂费（元）", value=0, step=500, format="%d")
+
+    st.divider()
+    generate_report = st.button("📄 生成报告", use_container_width=True)
 
 # ============================================================
 # 计算核心
@@ -275,3 +283,179 @@ with st.expander("📝 当前所有参数（供截图/记录）"):
         "结果": {"公允价值": f"{fair_value:,.0f}", "NPV": f"{npv:,.0f}",
                  "终值": f"{terminal_value:,}"},
     })
+
+# ============================================================
+# 报告生成
+# ============================================================
+if generate_report:
+    with st.spinner("正在生成图文报告..."):
+        # 重新生成热力图
+        fig_h, ax_h = plt.subplots(figsize=(6, 4))
+        im = ax_h.imshow(sensitivity_array, cmap="RdYlGn", aspect="auto")
+        ax_h.set_xticks(range(len(growth_rates)))
+        ax_h.set_yticks(range(len(discount_rates)))
+        ax_h.set_xticklabels(gr_labels)
+        ax_h.set_yticklabels(dr_labels)
+        ax_h.set_xlabel("租金/成本增长率")
+        ax_h.set_ylabel("折现率")
+        ax_h.set_title("NPV 敏感性矩阵")
+        for i in range(len(discount_rates)):
+            for j in range(len(growth_rates)):
+                ax_h.text(j, i, f"{sensitivity_matrix[i][j]:,.0f}", ha="center", va="center",
+                        color="black", fontsize=9, fontweight="bold")
+        plt.colorbar(im, ax=ax_h, label="NPV（元）")
+        plt.tight_layout()
+        heat_html = fig_to_html(fig_h)
+        plt.close(fig_h)
+
+        # 重新生成现金流图
+        fig_cf, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        colors_bar = ["#2ecc71" if v > 0 else "#e74c3c" for v in plot_cf]
+        ax1.bar(plot_years, plot_cf, color=colors_bar, alpha=0.7)
+        ax1.axhline(y=0, color="gray", linestyle="-", linewidth=0.5)
+        ax1.set_xlabel("年份")
+        ax1.set_ylabel("净现金流（元）")
+        ax1.set_title("年度净现金流")
+        ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+        ax2.plot(years, cumulative_npv, "b-o", markersize=3, linewidth=1.5)
+        ax2.axhline(y=0, color="gray", linestyle="--", linewidth=0.8)
+        ax2.set_xlabel("年份")
+        ax2.set_ylabel("累积 NPV（元）")
+        ax2.set_title("累积 NPV 曲线")
+        ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+        ax2.grid(True, alpha=0.3)
+        plt.tight_layout()
+        cf_html = fig_to_html(fig_cf)
+        plt.close(fig_cf)
+
+        # 预计算结论
+        fv_conc = (
+            f"公允价值高于售价（{fair_value - house_price:+,.0f} 元），居住价值上值得购买。"
+            if fair_value > house_price
+            else f"公允价值低于售价（{-premium_ratio:.1f}%），溢价部分反映地段、供需等市场因素。"
+        )
+        npv_conc = (
+            "NPV > 0，当前参数下买房比租房更划算。"
+            if npv > 0
+            else f"NPV < 0，租房并将资金用于投资（年化{discount_rate*100:.0f}%）更划算。但需考虑居住体验、稳定性等非财务价值。"
+        )
+
+        report_md = f"""# 房产现金流估值报告
+
+**生成时间：** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+---
+
+## 一、参数假设
+
+### 购房方案
+| 参数 | 值 |
+|---|---|
+| 总房价 | {house_price:,.0f} 元 |
+| 首付比例 | {down_payment_ratio*100:.0f}% |
+| 首付金额 | {down_payment:,.0f} 元 |
+| 贷款金额 | {loan_amount:,.0f} 元 |
+| 贷款利率 | {loan_rate*100:.1f}% |
+| 贷款年限 | {loan_term_years} 年 |
+
+### 估值假设
+| 参数 | 值 |
+|---|---|
+| 月租金 | {monthly_rent:,} 元 |
+| 年持有成本 | {annual_holding_cost:,} 元 |
+| 租金/成本增长率 | {real_growth_rate*100:.1f}% |
+| 通胀率 | {inflation*100:.0f}% |
+| 折现率 | {discount_rate*100:.0f}% |
+| 折旧率 | {depreciation_rate*100:.0f}% |
+| 终值人口比例 | {terminal_pop_ratio*100:.0f}% |
+| 持有期 | {holding_years} 年 |
+
+### 税费参数
+| 参数 | 值 |
+|---|---|
+| 契税比例 | {deed_tax_rate*100:.1f}% |
+| 中介费比例 | {agency_fee_rate*100:.0f}% |
+| 增值税率 | {vat_rate*100:.1f}% |
+| 个人所得税率 | {iit_rate*100:.1f}% |
+| 其他杂费 | {other_purchase_fees:,.0f} 元 |
+
+---
+
+## 二、公允价值分析
+
+| 项目 | 金额 |
+|---|---|
+| 省租金现值总计 | {pv_rent_sum:,.0f} 元 |
+| 期末残值（不折现） | {terminal_value:,} 元 |
+| **居住公允价值** | **{fair_value:,.0f} 元** |
+| 当前售价 | {house_price:,.0f} 元 |
+| 价差 | {house_price - fair_value:+,.0f} 元 |
+
+**结论：** {fv_conc}
+
+---
+
+## 三、NPV 决策分析
+
+**NPV = -首付 - 税费 + Σ(省租金 - 月供 - 持有成本) / (1+折现率)^t + 期末残值**
+
+| 项目 | 金额 |
+|---|---|
+| 首付现金流出 | {down_payment:,.0f} 元 |
+| 买房税费 | {purchase_fees:,.0f} 元 |
+| 年度现金流现值总和 | {npv_annual_pv_sum:,.0f} 元 |
+| 期末残值（不折现） | {terminal_value:,.0f} 元 |
+| **净现值 (NPV)** | **{npv:,.0f} 元** |
+
+**结论：** {npv_conc}
+
+---
+
+## 四、敏感性分析
+
+### NPV 敏感性矩阵（折现率 × 增长率）
+
+| 折现率 | {gr_labels[0]} | {gr_labels[1]} | {gr_labels[2]} |
+|---|---|---|---|
+| {dr_labels[0]} | {sensitivity_matrix[0][0]:,.0f} | {sensitivity_matrix[0][1]:,.0f} | {sensitivity_matrix[0][2]:,.0f} |
+| {dr_labels[1]} | {sensitivity_matrix[1][0]:,.0f} | {sensitivity_matrix[1][1]:,.0f} | {sensitivity_matrix[1][2]:,.0f} |
+| {dr_labels[2]} | {sensitivity_matrix[2][0]:,.0f} | {sensitivity_matrix[2][1]:,.0f} | {sensitivity_matrix[2][2]:,.0f} |
+
+{heat_html}
+
+### 盈亏平衡房价（NPV=0）
+
+| 增长率 | {dr_labels[0]} | {dr_labels[1]} | {dr_labels[2]} |
+|---|---|---|---|
+| {gr_labels[0]} | {be_matrix[(discount_rates[0], growth_rates[0])]:,.0f} | {be_matrix[(discount_rates[1], growth_rates[0])]:,.0f} | {be_matrix[(discount_rates[2], growth_rates[0])]:,.0f} |
+| {gr_labels[1]} | {be_matrix[(discount_rates[0], growth_rates[1])]:,.0f} | {be_matrix[(discount_rates[1], growth_rates[1])]:,.0f} | {be_matrix[(discount_rates[2], growth_rates[1])]:,.0f} |
+| {gr_labels[2]} | {be_matrix[(discount_rates[0], growth_rates[2])]:,.0f} | {be_matrix[(discount_rates[1], growth_rates[2])]:,.0f} | {be_matrix[(discount_rates[2], growth_rates[2])]:,.0f} |
+
+基准场景：折现率 {discount_rate*100:.0f}%、增长率 {real_growth_rate*100:.1f}% → 盈亏平衡房价 **{be_base:,.0f} 元**
+
+---
+
+## 五、现金流与累积 NPV
+
+{cf_html}
+
+---
+
+## 六、总结
+
+- **居住公允价值：** {fair_value:,.0f} 元
+- **净现值（NPV）：** {npv:,.0f} 元
+- **盈亏平衡房价：** {be_base:,.0f} 元
+- **持有期：** {holding_years} 年
+
+> **免责声明：** 本报告仅供参考，不构成投资建议。估值结果基于用户输入的假设参数，实际市场情况可能存在偏差。房产投资需综合考虑地理位置、政策变化、市场供需等多方面因素。
+"""
+        fname, png_bytes = md_to_png(report_md, f"dcf_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+
+        st.success("报告生成完成！")
+        st.download_button("📥 下载 PNG", data=png_bytes,
+                         file_name=fname,
+                         mime="image/png", use_container_width=True)
+
+        with st.expander("📄 报告预览"):
+            st.image(png_bytes)

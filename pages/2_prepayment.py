@@ -5,8 +5,13 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import io
+import base64
+import os
+import datetime
 
 from valuation.prepayment import analyze_prepayment
+from valuation.report_utils import md_to_png, fig_to_html
 plt.rcParams["font.sans-serif"] = ["WenQuanYi Micro Hei", "Noto Sans CJK SC",
                                     "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -38,6 +43,9 @@ with st.sidebar:
     st.divider()
     st.header("📈 对比参数")
     investment_return = st.number_input("预期理财年化收益率", value=0.04, step=0.005, format="%.3f")
+
+    st.divider()
+    generate_report = st.button("📄 生成报告", use_container_width=True)
 
 # ============================================================
 # 计算
@@ -150,3 +158,109 @@ else:
             f"{plan_b['monthly_reduction']:,.0f} 元现金流。"
             + (" 注意：当前贷款利率低于理财预期，需综合考虑风险承受能力。"
                if loan_rate < investment_return else ""))
+
+# ============================================================
+# 报告生成
+# ============================================================
+if generate_report:
+    with st.spinner("正在生成图文报告..."):
+        chart_html = fig_to_html(fig)
+
+        if plan_a["interest_saved"] > plan_b["interest_saved"]:
+            rec_text = "方案A（缩短年限）省息更多"
+        else:
+            rec_text = "方案B（减少月供）释放现金流"
+
+        if loan_rate > investment_return:
+            cmp_text = "提前还贷更划算，还贷等效收益高于理财预期。"
+        elif loan_rate < investment_return:
+            cmp_text = "理财更划算，但需注意市场风险。"
+        else:
+            cmp_text = "两者基本持平。"
+
+        report_md = f"""# 提前还贷分析报告
+
+**生成时间：** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+---
+
+## 一、贷款参数
+
+| 参数 | 值 |
+|---|---|
+| 当前贷款余额 | {loan_balance:,.0f} 元 |
+| 年利率 | {loan_rate*100:.2f}% |
+| 剩余还款年限 | {remaining_years} 年 |
+| 计划提前还款金额 | {prepay_amount:,.0f} 元 |
+| 预期理财年化收益率 | {investment_return*100:.2f}% |
+
+---
+
+## 二、原贷款计划
+
+| 项目 | 数值 |
+|---|---|
+| 月供（等额本息） | {orig['monthly']:,.2f} 元 |
+| 剩余利息 | {orig['total_interest']:,.2f} 元 |
+| 本息合计 | {orig['total_payment']:,.2f} 元 |
+| 剩余期数 | {orig['total_months']} 期 |
+
+---
+
+## 三、方案A：缩短年限（月供不变）
+
+| 项目 | 数值 |
+|---|---|
+| 新月供 | {plan_a['monthly']:,.2f} 元 |
+| 剩余期数 | {plan_a['n_months']} 期（{plan_a['years']} 年 {plan_a['months']} 个月） |
+| 节省期限 | {orig['total_months'] - plan_a['n_months']} 期 |
+| 节省利息 | {plan_a['interest_saved']:,.2f} 元 |
+
+---
+
+## 四、方案B：减少月供（年限不变）
+
+| 项目 | 数值 |
+|---|---|
+| 新月供 | {plan_b['monthly']:,.2f} 元 |
+| 月供减少 | {plan_b['monthly_reduction']:,.2f} 元 |
+| 剩余期数 | {orig['total_months']} 期（不变） |
+| 节省利息 | {plan_b['interest_saved']:,.2f} 元 |
+
+---
+
+## 五、还贷 vs 理财
+
+| 项目 | 数值 |
+|---|---|
+| 提前还贷等效年化收益率 | {loan_rate*100:.2f}%（无风险） |
+| 理财预期年化收益率 | {investment_return*100:.2f}%（有风险） |
+| 提前还贷省息（方案A） | {plan_a['interest_saved']:,.2f} 元 |
+| 提前还贷省息（方案B） | {plan_b['interest_saved']:,.2f} 元 |
+| {prepay_amount:,} 元理财 {remaining_years} 年收益 | {invest_earning:,.2f} 元（预期） |
+
+**结论：** {cmp_text}
+
+---
+
+## 六、月供与利息对比
+
+{chart_html}
+
+---
+
+## 七、推荐
+
+**推荐方案：** {rec_text}
+
+> **免责声明：** 本报告仅供参考，不构成投资建议。提前还贷决策需综合考虑个人现金流状况、未来收入预期、市场利率走势等因素。
+"""
+        fname, png_bytes = md_to_png(report_md, f"prepay_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+
+        st.success("报告生成完成！")
+        st.download_button("📥 下载 PNG", data=png_bytes,
+                         file_name=fname,
+                         mime="image/png", use_container_width=True)
+
+        with st.expander("📄 报告预览"):
+            st.image(png_bytes)

@@ -5,10 +5,15 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import io
+import base64
+import os
+import datetime
 
 from valuation.hedonic import (
     calc_adjustments, calc_final_value, ELEVATOR_ORDER,
 )
+from valuation.report_utils import md_to_png, fig_to_html
 plt.rcParams["font.sans-serif"] = ["WenQuanYi Micro Hei", "Noto Sans CJK SC",
                                     "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -52,6 +57,9 @@ with st.sidebar:
     noise_level = st.selectbox("噪音", ["安静", "一般", "临街"], index=1)
     layout_type = st.selectbox("户型格局", ["方正全明", "普通", "异形"], index=1)
     elevator_ratio = st.selectbox("梯户比", ELEVATOR_ORDER, index=1)
+
+    st.divider()
+    generate_report = st.button("📄 生成报告", use_container_width=True)
 
 # ============================================================
 # 计算
@@ -169,3 +177,81 @@ with st.expander("📖 各因子系数参考"):
 
 st.divider()
 st.success(f"**最终估值：{base_price:,.0f} 元 → {final_value:,.0f} 元**")
+
+# ============================================================
+# 报告生成
+# ============================================================
+if generate_report:
+    with st.spinner("正在生成图文报告..."):
+        waterfall_html = fig_to_html(fig)
+
+        adj_rows = ""
+        for name, adj in adj_map.items():
+            amt = base_price * adj
+            adj_rows += f"| {name} | {adj*100:+.2f}% | {amt:+,.0f} 元 |\n"
+
+        report_md = f"""# 特征价格调价报告
+
+**生成时间：** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+---
+
+## 一、输入参数
+
+**基准价：** {base_price:,.0f} 元
+
+| 特征 | 值 |
+|---|---|
+| 所在楼层 | {floor_num} / {total_floors} 层 |
+| 主朝向 | {main_orient} |
+| 南向开间 | {south_rooms} 间 |
+| 通透性 | {cross_vent} |
+| 装修 | {decoration} |
+| 房龄 | {building_age} 年 |
+| 得房率 | {area_efficiency}% |
+| 景观视野 | {view_level} |
+| 噪音 | {noise_level} |
+| 户型格局 | {layout_type} |
+| 梯户比 | {elevator_ratio} |
+
+---
+
+## 二、调整明细
+
+| 因子 | 调整率 | 调整金额 |
+|---|---|---|
+{adj_rows}
+---
+
+## 三、瀑布图
+
+{waterfall_html}
+
+---
+
+## 四、估值结果
+
+| 项目 | 金额 |
+|---|---|
+| 基准价 | {base_price:,.0f} 元 |
+| 最终估值 | {final_value:,.0f} 元 |
+| 调整幅度 | {(final_value / base_price - 1) * 100:+.2f}% |
+| 调整总金额 | {final_value - base_price:+,.0f} 元 |
+
+---
+
+## 五、方法说明
+
+Hedonic 特征价格调价模型基于市场比较法原理，逐项评估房源各特征与基准小区平均水平的差异，通过调整系数修正得到个性化估值。各因子调整率基于市场经验数据，反映了不同特征对房产价值的影响程度。
+
+> **免责声明：** 本报告仅供参考，不构成投资建议。调整系数基于一般市场规律，实际交易价格可能因市场情绪、谈判能力、政策变化等因素产生偏差。
+"""
+        fname, png_bytes = md_to_png(report_md, f"hedonic_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+
+        st.success("报告生成完成！")
+        st.download_button("📥 下载 PNG", data=png_bytes,
+                         file_name=fname,
+                         mime="image/png", use_container_width=True)
+
+        with st.expander("📄 报告预览"):
+            st.image(png_bytes)
