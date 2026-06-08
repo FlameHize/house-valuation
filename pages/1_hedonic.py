@@ -24,42 +24,34 @@ st.title("📐 特征价格调价模型")
 st.markdown("在 DCF 小区公允价值的基础上，逐项调整房源特征得到最终估值。")
 
 # ============================================================
-# 基准价（从 DCF 自动同步）
+# 侧边栏 — 基准价 + 房源特征
 # ============================================================
-default_base = st.session_state.get("dcf_fair_value", 1_354_580)
+with st.sidebar:
+    st.header("📋 基准价")
+    default_base = st.session_state.get("dcf_fair_value", 1_354_580)
+    st.info(f"DCF 公允价值：**{default_base:,.0f} 元**"
+            + ("（已同步）" if "dcf_fair_value" in st.session_state else ""))
+    override = st.checkbox("手动覆盖基准价")
+    if override:
+        base_price = st.number_input("基准价（元）", value=int(default_base), step=100_000, format="%d")
+    else:
+        base_price = default_base
 
-st.info(f"DCF 计算的公允价值：**{default_base:,.0f} 元**"
-        + ("（已自动同步）" if "dcf_fair_value" in st.session_state else ""))
+    st.divider()
+    st.header("🏠 房源特征")
 
-override = st.checkbox("手动覆盖基准价")
-if override:
-    base_price = st.number_input("基准价（元）", value=int(default_base), step=100_000, format="%d")
-else:
-    base_price = default_base
-
-st.divider()
-
-# ============================================================
-# 房源特征输入
-# ============================================================
-st.subheader("🏠 房源特征")
-
-col1, col2, col3 = st.columns(3)
-with col1:
     floor_num = st.number_input("所在楼层", value=2, step=1, min_value=1)
     total_floors = st.number_input("楼栋总层数", value=11, step=1, min_value=1)
     main_orient = st.selectbox("主朝向", ["南", "东南", "西南", "东", "西", "东北", "西北", "北"])
     south_rooms = st.selectbox("南向开间数", [0, 1, 2, 3, 4])
     cross_vent = st.selectbox("通透性", ["南北通透", "非通透"])
-    decoration = st.selectbox("装修", ["精装", "简装", "毛坯"])
-
-with col2:
-    building_age = st.number_input("房龄（年）", value=7, step=1, min_value=0)
-    area_efficiency = st.number_input("得房率（%）", value=84, step=1, min_value=50, max_value=100)
-    view_level = st.selectbox("景观视野", ["一线无遮挡", "一般", "有遮挡"])
-    noise_level = st.selectbox("噪音", ["安静", "一般", "临街"])
-    layout_type = st.selectbox("户型格局", ["方正全明", "普通", "异形"])
-    elevator_ratio = st.selectbox("梯户比", ELEVATOR_ORDER)
+    decoration = st.selectbox("装修", ["精装", "简装", "毛坯"], index=2)
+    building_age = st.slider("房龄（年）", 0, 70, 7, 1)
+    area_efficiency = st.slider("得房率（%）", 60, 120, 75, 1, format="%d%%")
+    view_level = st.selectbox("景观视野", ["一线无遮挡", "一般", "有遮挡"], index=1)
+    noise_level = st.selectbox("噪音", ["安静", "一般", "临街"], index=1)
+    layout_type = st.selectbox("户型格局", ["方正全明", "普通", "异形"], index=1)
+    elevator_ratio = st.selectbox("梯户比", ELEVATOR_ORDER, index=1)
 
 # ============================================================
 # 计算
