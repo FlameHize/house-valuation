@@ -22,7 +22,7 @@ div[data-testid="stNumberInput"] input { text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏠 房产估值 DCF 模型")
+st.title("🏠 房产现金流估值模型")
 st.markdown("计算小区居住公允价值，作为 Hedonic 调价模型的基准价。")
 
 # ============================================================
@@ -51,11 +51,12 @@ with st.sidebar:
     st.header("💰 税费参数")
     col1, col2 = st.columns(2)
     with col1:
-        deed_tax_rate = st.slider("契税比例", 0.0, 3.0, 1.0, 0.1, format="%.1f%%") / 100
+        deed_tax_rate = st.slider("契税比例", 0.0, 3.0, 1.0, 0.1, format="%.1f%%",
+            help="首套 ≤140m²=1%，>140m²=1.5%；二套 ≤140m²=1%，>140m²=2%；三套及以上=3%") / 100
         agency_fee_rate = st.slider("中介费比例", 0.0, 3.0, 1.0, 0.1, format="%.1f%%") / 100
     with col2:
-        vat_rate = st.slider("增值税率（满二免征）", 0.0, 5.0, 0.0, 0.1, format="%.1f%%") / 100
-        iit_rate = st.slider("个人所得税率（满五唯一免征）", 0.0, 5.0, 0.0, 0.1, format="%.1f%%") / 100
+        vat_rate = st.slider("增值税率", 0.0, 5.0, 0.0, 0.1, format="%.1f%%", help="满二免征（持有满2年免增值税）") / 100
+        iit_rate = st.slider("个人所得税率", 0.0, 5.0, 0.0, 0.1, format="%.1f%%", help="满五唯一免征（持有满5年且唯一住房免个税）") / 100
     other_purchase_fees = st.number_input("其他杂费（元）", value=0, step=500, format="%d")
 
 # ============================================================
