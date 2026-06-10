@@ -147,20 +147,26 @@ col3.metric("期末残值", f"{terminal_value:,} 元",
             delta=f"原价 {house_price:,} 元")
 
 # ---------- 月供摘要 ----------
-with st.expander("📄 月供与费用明细", expanded=False):
+with st.expander("📄 月供与费用明细（按公允价值计算）", expanded=False):
+    fv_down_payment = fair_value * down_payment_ratio
+    fv_loan_amount = fair_value - fv_down_payment
+    fv_annual_payment = calc_monthly_payment(fv_loan_amount, loan_rate, loan_term_years) * 12
+    fv_purchase_fees = calc_purchase_fees(fair_value, deed_tax_rate, agency_fee_rate,
+                                           other_purchase_fees)
+    fv_total_repayment = fv_annual_payment * loan_term_years
+    fv_total_interest = fv_total_repayment - fv_loan_amount
+    fv_monthly_payment = fv_annual_payment / 12
+
     m, c = st.columns(2)
-    total_repayment = annual_payment * loan_term_years
-    total_interest = total_repayment - loan_amount
-    monthly_payment = annual_payment / 12
     with m:
-        st.markdown(f"**月供（等额本息）:** {monthly_payment:,.0f} 元/月")
-        st.markdown(f"**年供:** {annual_payment:,.0f} 元/年")
-        st.markdown(f"**首付:** {down_payment:,.0f} 元")
-        st.markdown(f"**贷款金额:** {loan_amount:,.0f} 元")
+        st.markdown(f"**月供（等额本息）:** {fv_monthly_payment:,.0f} 元/月")
+        st.markdown(f"**年供:** {fv_annual_payment:,.0f} 元/年")
+        st.markdown(f"**首付:** {fv_down_payment:,.0f} 元")
+        st.markdown(f"**贷款金额:** {fv_loan_amount:,.0f} 元")
     with c:
-        st.markdown(f"**{loan_term_years}年总还款:** {total_repayment:,.0f} 元")
-        st.markdown(f"**其中利息:** {total_interest:,.0f} 元")
-        st.markdown(f"**买房一次性费用:** {purchase_fees:,.0f} 元")
+        st.markdown(f"**{loan_term_years}年总还款:** {fv_total_repayment:,.0f} 元")
+        st.markdown(f"**其中利息:** {fv_total_interest:,.0f} 元")
+        st.markdown(f"**买房一次性费用:** {fv_purchase_fees:,.0f} 元")
 
 # ---------- 公允价值分析 ----------
 st.divider()
