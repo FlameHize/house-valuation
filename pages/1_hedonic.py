@@ -178,6 +178,32 @@ with st.expander("📖 各因子系数参考"):
 st.divider()
 st.success(f"**最终估值：{base_price:,.0f} 元 → {final_value:,.0f} 元**")
 
+# ---------- 联动：按估值重算月供 ----------
+if "dcf_loan_rate" in st.session_state:
+    from valuation.dcf import calc_monthly_payment, calc_purchase_fees
+    dpr = st.session_state["dcf_down_payment_ratio"]
+    lr = st.session_state["dcf_loan_rate"]
+    lty = st.session_state["dcf_loan_term_years"]
+    dtr = st.session_state["dcf_deed_tax_rate"]
+    afr = st.session_state["dcf_agency_fee_rate"]
+    opf = st.session_state["dcf_other_purchase_fees"]
+
+    loan_amt = final_value * (1 - dpr)
+    down_pmt = final_value * dpr
+    fees = calc_purchase_fees(final_value, dtr, afr, opf)
+    mp = calc_monthly_payment(loan_amt, lr, lty)
+
+    with st.expander("📊 按估值计算的月供与费用", expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"**调后估值：** {final_value:,.0f} 元")
+            st.markdown(f"**首付（{dpr*100:.0f}%）：** {down_pmt:,.0f} 元")
+            st.markdown(f"**贷款金额：** {loan_amt:,.0f} 元")
+        with c2:
+            st.markdown(f"**月供（{lty}年等额本息）：** {mp:,.0f} 元/月")
+            st.markdown(f"**年供：** {mp*12:,.0f} 元/年")
+            st.markdown(f"**一次性费用：** {fees:,.0f} 元")
+
 # ============================================================
 # 报告生成
 # ============================================================

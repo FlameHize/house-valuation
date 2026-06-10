@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "property-valuation": {
+      "transportType": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-property-valuation-server@latest"],
+      "env": {
+        "MCP-APPID": "QqLjaNOYygSm/d6z0qy7Wgul8QladwKfayoUAdXBwEk="
+      }
+    }
+  }
+}
+

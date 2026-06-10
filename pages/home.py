@@ -110,6 +110,12 @@ be_base = be_matrix[(discount_rate, real_growth_rate)]
 # 存入 session_state 供调价页面取用
 st.session_state["dcf_fair_value"] = fair_value
 st.session_state["dcf_house_price"] = house_price
+st.session_state["dcf_down_payment_ratio"] = down_payment_ratio
+st.session_state["dcf_loan_rate"] = loan_rate
+st.session_state["dcf_loan_term_years"] = loan_term_years
+st.session_state["dcf_deed_tax_rate"] = deed_tax_rate
+st.session_state["dcf_agency_fee_rate"] = agency_fee_rate
+st.session_state["dcf_other_purchase_fees"] = other_purchase_fees
 
 # ============================================================
 # 展示结果
