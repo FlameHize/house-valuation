@@ -34,8 +34,25 @@ st.markdown("计算小区居住公允价值，作为 Hedonic 调价模型的基�
 # 侧边栏 — 所有参数
 # ============================================================
 with st.sidebar:
+    st.header("📋 基准价计算")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        area_sqm = st.number_input("建筑面积（m²）", value=100.0, step=10.0, format="%.1f")
+    with col_b:
+        unit_price_input = st.number_input("均价（元/m²）", value=15_000, step=1_000, format="%d",
+            help="填写该小区近期成交均价（非挂牌价）。可在贝壳App查看近3-6个月同小区真实成交价。")
+    computed_price = int(area_sqm * unit_price_input)
+
+    override_price = st.checkbox("手动输入总价", value=False,
+                                 help="不勾选则使用面积×单价的计算结果作为总房价")
+    if override_price:
+        house_price = st.number_input("总房价（元）", value=computed_price, step=100_000, format="%d")
+    else:
+        house_price = computed_price
+        st.markdown(f"**计算总价：** {house_price:,.0f} 元（{area_sqm:.0f}m² × {unit_price_input:,} 元/m²）")
+
+    st.divider()
     st.header("📋 购房方案参数")
-    house_price = st.number_input("总房价（元）", value=1_500_000, step=100_000, format="%d")
     down_payment_ratio = st.slider("首付比例", 15, 100, 20, 5, format="%d%%") / 100
     loan_rate = st.slider("贷款利率（年化）", 0.0, 10.0, 2.6, 0.1, format="%.1f%%") / 100
     loan_term_years = st.slider("贷款年限", 10, 30, 30, 5)
